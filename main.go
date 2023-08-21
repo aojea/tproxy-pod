@@ -114,9 +114,7 @@ func main() {
 }
 
 func healthCheckHandler(res http.ResponseWriter, req *http.Request) {
-	data := []byte("V1 of teacher's called")
-	res.WriteHeader(200)
-	res.Write(data)
+	fmt.Fprintf(res, "Request received from %s destination %s : %v", req.Host, req.RequestURI, req)
 }
 
 // syncRules syncs the tproxy rules to divert traffic to our server
