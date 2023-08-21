@@ -50,7 +50,7 @@ spec:
       serviceAccountName: tproxypod
       containers:
       - name: tproxypod-cni
-        image: uaojea/tproxypod:v0.1.0
+        image: aojea/tproxypod:v0.1.0
         volumeMounts:
         - name: xtables-lock
           mountPath: /run/xtables.lock
