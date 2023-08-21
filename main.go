@@ -114,7 +114,8 @@ func main() {
 }
 
 func healthCheckHandler(res http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(res, "Request received from %s destination %s : %v", req.Host, req.RequestURI, req)
+	log.Printf("Received request to %s : %+v\n", req.RequestURI, req)
+	fmt.Fprintf(res, "Request received from %s destination %s : %v\n", req.Host, req.RequestURI, req)
 }
 
 // syncRules syncs the tproxy rules to divert traffic to our server
