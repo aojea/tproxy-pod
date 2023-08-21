@@ -10,6 +10,8 @@ COPY . .
 RUN go mod download
 RUN CGO_ENABLED=0 go build -o /go/bin/tproxypod .
 
-FROM registry.k8s.io/build-image/distroless-iptables:v0.2.1
+FROM debian:12
+RUN apt-get update && \
+      apt-get -y install iptables iproute2
 COPY --from=builder --chown=root:root /go/bin/tproxypod /bin/tproxypod
 CMD ["/bin/tproxypod"]
