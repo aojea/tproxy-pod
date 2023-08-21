@@ -154,13 +154,15 @@ func syncRules() error {
 	}
 	// # ip rule add fwmark 1 lookup 100
 	// # ip route add local 0.0.0.0/0 dev lo table 100
+	// TODO: make it idempotent, it creates new rules in each execution, create only if does not exist
 	cmd := exec.Command("ip", "rule", "add", "fwmark", "1", "lookup", "100")
 	if err := cmd.Run(); err != nil {
 		return err
 	}
 	cmd = exec.Command("ip", "route", "add", "local", "0.0.0.0/0", "dev", "lo", "table", "100")
 	if err := cmd.Run(); err != nil {
-		return err
+		// TODO it returns an error if route exists
+		log.Printf("error trying to do AnyIP to the table 100: %v", err)
 	}
 
 	// iptables -t mangle -A PREROUTING -p tcp --dport 80 -j TPROXY --tproxy-mark 0x1/0x1 --on-port 50080
