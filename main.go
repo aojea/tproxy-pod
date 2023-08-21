@@ -143,7 +143,7 @@ func syncRules() error {
 			return err
 		}
 	}
-	if err := ipt.AppendUnique("mangle", "PREROUTING", "-p", "tcp", "-m", "spclet", "-j", tproxyDivertChain); err != nil {
+	if err := ipt.AppendUnique("mangle", "PREROUTING", "-p", "tcp", "-m", "socket", "-j", tproxyDivertChain); err != nil {
 		return err
 	}
 	if err := ipt.AppendUnique("mangle", tproxyDivertChain, "-j", "MARK", "--set-mark", "1"); err != nil {
