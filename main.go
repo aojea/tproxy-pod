@@ -32,7 +32,7 @@ var (
 )
 
 func init() {
-	flag.IntVar(&flagPort, "p", 8080, "port to listen")
+	flag.IntVar(&flagPort, "p", 1, "port to listen")
 
 	flag.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: cloud-provider-kind [options]\n\n")
@@ -79,7 +79,7 @@ func main() {
 	}
 
 	// Start Listener
-	tcpListener, err := lc.Listen(ctx, "tcp6", fmt.Sprintf("127.0.0.1:%d", flagPort))
+	tcpListener, err := lc.Listen(ctx, "tcp", fmt.Sprintf("0.0.0.0:%d", flagPort))
 	if err != nil {
 		log.Printf("Could not start TCP listener: %s", err)
 		return
@@ -166,5 +166,5 @@ func syncRules() error {
 	}
 
 	// iptables -t mangle -A PREROUTING -p tcp --dport 80 -j TPROXY --tproxy-mark 0x1/0x1 --on-port 50080
-	return ipt.InsertUnique("mangle", "PREROUTING", 1, "-p", "tcp", "--dport", "8080", "-j", "TPROXY", "--tproxy-mark", "0x1/0x1", "--on-port", strconv.Itoa(flagPort))
+	return ipt.InsertUnique("mangle", "PREROUTING", 1, "-p", "tcp", "-d", "10.244.0.0/16", "--dport", "8180", "-j", "TPROXY", "--tproxy-mark", "0x1/0x1", "--on-port", strconv.Itoa(flagPort))
 }
