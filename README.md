@@ -146,8 +146,8 @@ I0729 15:44:26.825429       1 main.go:224] Failed to connect to original destina
 6. Check that an external connection to the exposed app uses TLS
 
 ```sh
-root@kind-worker:/# curl -k https://10.244.1.24:80/clientip
-127.0.0.1:43544
+root@kind-worker:/# curl -k https://10.244.1.26:80/clientip
+curl: (56) OpenSSL SSL_read: OpenSSL/3.0.11: error:0A00045C:SSL routines::tlsv13 alert certificate required, errno 0
 
 root@kind-worker:/#  curl  http://10.244.1.24:80/clientip
 curl: (52) Empty reply from server
