@@ -49,8 +49,10 @@ spec:
         args:
           - netexec
           - --http-port=80
+      initContainers:
       - name: proxy
         image: aojea/tproxy:test
+        restartPolicy: Always
         resources:
           requests:
             cpu: "100m"
