@@ -73,6 +73,12 @@ kind create cluster
 2. Install the tproxy-pod using the manifest in this repo
 
 ```sh
+make kind-image
+```
+
+or
+
+```sh
 kubectl apply -f install.yaml
 ```
 
