@@ -44,7 +44,6 @@ var (
 	flagRootCertificate string
 	flagCertificate     string
 	flagKey             string
-	tlsConfig           *tls.Config
 )
 
 var bypassDialer = &net.Dialer{
@@ -78,8 +77,20 @@ func main() {
 
 	klog.Infof("flags: %v", flag.Args())
 
-	var cert tls.Certificate
+	caCertPool := x509.NewCertPool()
+	var caCertFile []byte
 	var err error
+	if flagRootCertificate != "" {
+		caCertFile, err = os.ReadFile(flagRootCertificate)
+		if err != nil {
+			klog.Fatalf("failed to load root certificate: %v", err)
+		}
+	} else {
+		caCertFile = localhostCert
+	}
+
+	caCertPool.AppendCertsFromPEM(caCertFile)
+	var cert tls.Certificate
 	if flagCertificate == "" || flagKey == "" {
 		cert, err = tls.X509KeyPair(localhostCert, localhostKey)
 		if err != nil {
@@ -91,8 +102,6 @@ func main() {
 			klog.Fatal(err)
 		}
 	}
-
-	tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
 
 	// trap Ctrl+C and call cancel on the context
 	ctx := context.Background()
@@ -153,7 +162,10 @@ func main() {
 				return
 			}
 
-			go handleTCPConn(conn)
+			go handleTCPConn(conn, &tls.Config{
+				ClientCAs:    caCertPool,
+				Certificates: []tls.Certificate{cert},
+			})
 		}
 	}()
 
@@ -185,18 +197,6 @@ func main() {
 	}
 	defer tcpTLSListener.Close()
 
-	caCertPool := x509.NewCertPool()
-	var caCertFile []byte
-	if flagRootCertificate != "" {
-		caCertFile, err = os.ReadFile(flagRootCertificate)
-		if err != nil {
-			klog.Fatalf("failed to load root certificate: %v", err)
-		}
-	} else {
-		caCertFile = localhostCert
-	}
-
-	caCertPool.AppendCertsFromPEM(caCertFile)
 	tlsServerConfig := &tls.Config{
 		ClientCAs:    caCertPool,
 		ClientAuth:   tls.RequireAndVerifyClientCert,
@@ -232,7 +232,7 @@ func main() {
 	log.Println("TProxy listener closing")
 }
 
-func handleTCPConn(conn net.Conn) {
+func handleTCPConn(conn net.Conn, tlsConfig *tls.Config) {
 	klog.Infof("Accepting TCP connection from %s with destination of %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
 	defer conn.Close()
 
