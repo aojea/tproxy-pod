@@ -2,79 +2,60 @@
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: tproxypod
+  name: tproxy
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: tproxypod
+  name: tproxy
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: tproxypod
+  name: tproxy
 subjects:
 - kind: ServiceAccount
-  name: tproxypod
+  name: tproxy
   namespace: kube-system
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: tproxypod
+  name: tproxy
   namespace: kube-system
 ---
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
-  name: tproxypod
-  namespace: kube-system
+  name: tproxy
   labels:
     tier: node
-    app: tproxypod
-    k8s-app: tproxypod
+    app: tproxy
+    k8s-app: tproxy
 spec:
+  replicas: 2
   selector:
     matchLabels:
-      app: tproxypod
+      app: tproxy
   template:
     metadata:
       labels:
         tier: node
-        app: tproxypod
-        k8s-app: tproxypod
+        app: tproxy
+        k8s-app: tproxy
     spec:
-      hostNetwork: true
-      tolerations:
-      - operator: Exists
-        effect: NoSchedule
-      serviceAccountName: tproxypod
       containers:
-      - name: tproxypod-cni
-        image: aojea/tproxypod:v0.1.0
-        volumeMounts:
-        - name: xtables-lock
-          mountPath: /run/xtables.lock
-          readOnly: false
-        - name: lib-modules
-          mountPath: /lib/modules
-          readOnly: true
+      - name: app
+        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
+        args:
+          - netexec
+          - --http-port=80
+      - name: proxy
+        image: aojea/tproxy:test
         resources:
           requests:
             cpu: "100m"
             memory: "50Mi"
-          limits:
-            cpu: "100m"
-            memory: "50Mi"
         securityContext:
-          privileged: false
           capabilities:
-            add: ["NET_RAW", "NET_ADMIN"]
-      volumes:
-      - name: xtables-lock
-        hostPath:
-          path: /run/xtables.lock
-          type: FileOrCreate
-      - name: lib-modules
-        hostPath:
-          path: /lib/modules
+            add: ["NET_ADMIN"]
 ---
