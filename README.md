@@ -41,10 +41,11 @@ succesful it forwards the connection from the client.
 
 - [ ] Retain source IP and Port on the Ingress traffic
 - [ ] Webhook injection example
-- [ ] Do a proper demo with certificates mounted on the Pod and associated to the Serviec account
+- [ ] Do a proper demo with certificates mounted on the Pod and associated to the Service account, per example https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity
 - [ ] UDP support
 - [ ] Filter to apply mTLS to a specific set of addresses
 - [ ] Handle TCP And HTTP kubelet probes
+- [ ] Run TCP benchmarks encrypted vs un-encrypted
 
 
 
