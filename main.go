@@ -154,9 +154,26 @@ func main() {
 
 	// The TCP socket has to listen in a socket with IP_TRANSPARENT
 	klog.Infof("Binding TLS TProxy listener to 127.0.0.1:%d", flagPortTLS)
-
+	// Create Listener Config
+	lcTLS := net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				// Enable IP_TRANSPARENT
+				err := unix.SetsockoptInt(int(fd), syscall.SOL_IP, syscall.IP_TRANSPARENT, 1)
+				if err != nil {
+					log.Fatalf("Could not set IP_TRANSPARENT socket option: %s", err)
+					return
+				}
+				// Mark connections so thet are not processed by the netfilter TPROXY rules
+				if err := unix.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_MARK, tproxyBypassMark); err != nil {
+					klog.Fatalf("setting SO_MARK bypass: %v", err)
+					return
+				}
+			})
+		},
+	}
 	// Start Listener
-	tcpTLSListener, err := lc.Listen(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", flagPortTLS))
+	tcpTLSListener, err := lcTLS.Listen(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", flagPortTLS))
 	if err != nil {
 		klog.Infof("Could not start TCP listener: %s", err)
 		return
@@ -247,7 +264,8 @@ func handleTLSConn(conn net.Conn) {
 	host = "127.0.0.1"
 	klog.Infof("Connecting to [%s]", net.JoinHostPort(host, port))
 
-	remoteHost, remotePort, err := net.SplitHostPort(conn.RemoteAddr().String())
+	/* disable because it may break conntrack
+	remoteHost, _, err := net.SplitHostPort(conn.RemoteAddr().String())
 	if err != nil {
 		klog.Infof("Failed to get remote address [%s]: %v", conn.RemoteAddr().String(), err)
 		return
@@ -257,14 +275,15 @@ func handleTLSConn(conn net.Conn) {
 		klog.Infof("Failed to get remote port [%s]: %v", remotePort, err)
 		return
 	}
+
 	dialer := &net.Dialer{
 		LocalAddr: &net.TCPAddr{
-			IP:   net.ParseIP(remoteHost),
-			Port: rPort,
+			IP: net.ParseIP(remoteHost),
+			//		Port: rPort,
 		},
 		Control: func(network, address string, c syscall.RawConn) error {
 			return c.Control(func(fd uintptr) {
-				// Enable IP_TRANSPARENT
+				// Enable IP_TRANSPARENT to be able to use the remote host IP as source
 				err := unix.SetsockoptInt(int(fd), syscall.SOL_IP, syscall.IP_TRANSPARENT, 1)
 				if err != nil {
 					klog.Fatalf("Could not set IP_TRANSPARENT socket option: %v", err)
@@ -277,8 +296,9 @@ func handleTLSConn(conn net.Conn) {
 			})
 		},
 	}
+	*/
 
-	remoteConn, err := dialer.Dial("tcp", net.JoinHostPort(host, port))
+	remoteConn, err := net.Dial("tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		klog.Infof("Failed to connect to original destination [%s]: %s", conn.LocalAddr().String(), err)
 		return
@@ -352,22 +372,15 @@ func syncRules() error {
 		),
 		Comment: ptr.To("not process traffic not in cluster"),
 	})
-
-	// bypass mark
-	tx.Add(&knftables.Rule{
-		Chain: preroutingChain,
-		Rule: knftables.Concat(
-			"meta", "mark", tproxyBypassMark, "return",
-		),
-	})
-
 	// process coming from external interface
 	// https://www.netfilter.org/projects/nftables/manpage.html
+	// incoming traffic from outside should be redirected to the TLS listener
 	tx.Add(&knftables.Rule{
 		Chain: preroutingChain,
 		Rule: knftables.Concat(
-			"meta", "iifname", "!=", "lo", "meta", "mark", "set", tproxyMarkTLStoTCP,
+			"meta", "iifname", "!=", "lo", "meta", "l4proto", "tcp", "tproxy", "ip", "to", net.JoinHostPort("127.0.0.1", strconv.Itoa(flagPortTLS)), "accept",
 		),
+		Comment: ptr.To("external originated traffic to TLS proxy"),
 	})
 
 	// Packet originated internally (not by this proxy) should be redirected
@@ -384,15 +397,6 @@ func syncRules() error {
 		Comment: ptr.To("local originated traffic to TCP proxy"),
 	})
 
-	// incoming traffic from outside should be redirected to the TLS listener
-	tx.Add(&knftables.Rule{
-		Chain: preroutingChain,
-		Rule: knftables.Concat(
-			"meta", "mark", tproxyMarkTLStoTCP, "meta", "l4proto", "tcp", "tproxy", "ip", "to", net.JoinHostPort("127.0.0.1", strconv.Itoa(flagPortTLS)), "accept",
-		),
-		Comment: ptr.To("external originated traffic to TLS proxy"),
-	})
-
 	// Add a chain on the OUTPUT HOOK
 	// packets generated in the namespace
 	outputChain := string("tproxy-output")
@@ -405,13 +409,6 @@ func syncRules() error {
 	tx.Flush(&knftables.Chain{
 		Name: outputChain,
 	})
-	tx.Add(&knftables.Rule{
-		Chain: outputChain,
-		Rule: knftables.Concat(
-			"ip", "daddr", "!=", "@", rfc1918Set, "return",
-		),
-		Comment: ptr.To("not process traffic not in cluster"),
-	})
 	// bypass mark
 	tx.Add(&knftables.Rule{
 		Chain: outputChain,
@@ -419,11 +416,18 @@ func syncRules() error {
 			"meta", "mark", tproxyBypassMark, "return",
 		),
 	})
-	// Mark traffic to be processed by the proxy
 	tx.Add(&knftables.Rule{
 		Chain: outputChain,
 		Rule: knftables.Concat(
-			"meta", "l4proto", "tcp", "meta", "mark", "set", tproxyMarkTCPtoTLS,
+			"ip", "daddr", "!=", "@", rfc1918Set, "return",
+		),
+		Comment: ptr.To("not process traffic not in cluster"),
+	})
+	// Mark traffic originated locally and destined to an external address to be processed by the transparent proxy
+	tx.Add(&knftables.Rule{
+		Chain: outputChain,
+		Rule: knftables.Concat(
+			"meta", "oifname", "!=", "lo", "meta", "l4proto", "tcp", "meta", "mark", "set", tproxyMarkTCPtoTLS,
 		),
 	})
 
