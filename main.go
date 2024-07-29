@@ -75,15 +75,17 @@ func main() {
 
 	klog.Infof("flags: %v", flag.Args())
 
-	cert, err := tls.LoadX509KeyPair(flagCertificate, flagKey)
-	if err != nil {
-		// klog.Fatal(err)
-	}
-
+	var cert tls.Certificate
+	var err error
 	if flagCertificate == "" || flagKey == "" {
 		cert, err = tls.X509KeyPair(localhostCert, localhostKey)
 		if err != nil {
 			klog.Fatalf("Failed to build cert with error: %+v", err)
+		}
+	} else {
+		cert, err = tls.LoadX509KeyPair(flagCertificate, flagKey)
+		if err != nil {
+			klog.Fatal(err)
 		}
 	}
 
