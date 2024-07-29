@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"io"
@@ -37,12 +38,13 @@ const (
 )
 
 var (
-	flagPortTCP     int
-	flagPortTLS     int
-	flagIPv6        bool
-	flagCertificate string
-	flagKey         string
-	tlsConfig       *tls.Config
+	flagPortTCP         int
+	flagPortTLS         int
+	flagIPv6            bool
+	flagRootCertificate string
+	flagCertificate     string
+	flagKey             string
+	tlsConfig           *tls.Config
 )
 
 var bypassDialer = &net.Dialer{
@@ -60,7 +62,8 @@ var bypassDialer = &net.Dialer{
 func init() {
 	flag.IntVar(&flagPortTCP, "tcp-port", 1, "port to listen on TCP")
 	flag.IntVar(&flagPortTLS, "tls-port", 2, "port to listen on TLS")
-	flag.StringVar(&flagCertificate, "cert", "", "certifcate")
+	flag.StringVar(&flagRootCertificate, "ca-cert", "", "root certificate")
+	flag.StringVar(&flagCertificate, "cert", "", "certificate")
 	flag.StringVar(&flagKey, "key", "", "certificate key")
 
 	flag.Usage = func() {
@@ -181,7 +184,27 @@ func main() {
 		return
 	}
 	defer tcpTLSListener.Close()
-	tlsListener := tls.NewListener(tcpTLSListener, tlsConfig)
+
+	caCertPool := x509.NewCertPool()
+	var caCertFile []byte
+	if flagRootCertificate != "" {
+		caCertFile, err = os.ReadFile(flagRootCertificate)
+		if err != nil {
+			klog.Fatalf("failed to load root certificate: %v", err)
+		}
+	} else {
+		caCertFile = localhostCert
+	}
+
+	caCertPool.AppendCertsFromPEM(caCertFile)
+	tlsServerConfig := &tls.Config{
+		ClientCAs:    caCertPool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{cert},
+	}
+
+	tlsListener := tls.NewListener(tcpTLSListener, tlsServerConfig)
 
 	go func() {
 		for {
