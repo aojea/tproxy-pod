@@ -46,6 +46,7 @@ succesful it forwards the connection from the client.
 - [ ] Filter to apply mTLS to a specific set of addresses
 - [ ] Handle TCP And HTTP kubelet probes
 - [ ] Run TCP benchmarks encrypted vs un-encrypted
+- [ ] IPv6
 
 
 
